@@ -16,7 +16,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		app.notFound(w)
 		return
 	}
-	// w.Write([]byte("Hello from Snippetbox"))
+
 	log.Println("got request from /")
 
 	snippets, err := app.snippets.Latest()
