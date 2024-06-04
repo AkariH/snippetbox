@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"log"
 	"net/http"
@@ -68,30 +70,55 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 // Add a new snippetCreate handler, which for now returns a placeholder
 // response. We'll update this shortly to show a HTML form.
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display the form for creating a new snippet..."))
+	data := app.newTemplateData(r)
+	app.render(w, http.StatusOK, "create.html", data)
+
 }
 
 func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+	title := r.PostForm.Get("title")
+	content := r.PostForm.Get("content")
+	expires, err := strconv.Atoi(r.PostForm.Get("expires"))
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+	app.infoLog.Print(r)
 
-	// dummy varible
-	title := "0 snail"
-	content := "0 nail\nClimb Mount Fuji,\nbut slowly,slowly!\n\n- Kobayashi Issa"
-	expires := 7
-
-	// pass the data into snippetmodel.Insert() method
-
+	// Initialize a map to hold any validation errors for the form fields.
+	fieldErrors := make(map[string]string)
+	// Check that the title value is not blank and is not more than 100
+	// characters long. If it fails either of those checks, add a message to the
+	// errors map using the field name as the key.
+	if strings.TrimSpace(title) == "" {
+		fieldErrors["title"] = "This field cannot be blank"
+	} else if utf8.RuneCountInString(title) > 100 {
+		fieldErrors["title"] = "This field cannot be more than 100 characters long"
+	}
+	// Check that the Content value isn't blank.
+	if strings.TrimSpace(content) == "" {
+		fieldErrors["content"] = "This field cannot be blank"
+	}
+	// Check the expires value matches one of the permitted values (1, 7 or
+	// 365).
+	if expires != 1 && expires != 7 && expires != 365 {
+		fieldErrors["expires"] = "This field must equal 1, 7 or 365"
+	}
+	// If there are any errors, dump them in a plain text HTTP response and
+	// return from the handler.
+	if len(fieldErrors) > 0 {
+		fmt.Fprint(w, fieldErrors)
+		return
+	}
 	id, err := app.snippets.Insert(title, content, expires)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
-
-	// http.Redirect(w, r, fmt.Sprintf("/snippet/view?id=%d", id), http.StatusSeeOther)
-
-	// Update the redirect path to use the new clean URL format.
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
-
-	w.Write([]byte("Create a new snippet..."))
-	log.Println("got request from /snippet/create")
-
 }
